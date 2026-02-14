@@ -30,6 +30,14 @@ public class Tork
     /// </summary>
     public GovernanceResult Govern(string content)
     {
+        return Govern(content, null);
+    }
+
+    /// <summary>
+    /// Govern content with regional and industry-specific PII detection.
+    /// </summary>
+    public GovernanceResult Govern(string content, GovernOptions? options)
+    {
         var piiDetected = DetectPII(content);
         var action = DetermineAction(piiDetected);
         var output = action == "redact" ? Redact(content, piiDetected) : content;
@@ -48,7 +56,9 @@ public class Tork
             Action = action,
             Output = output,
             Pii = piiDetected,
-            Receipt = receipt
+            Receipt = receipt,
+            Region = options?.Region,
+            Industry = options?.Industry
         };
     }
 
