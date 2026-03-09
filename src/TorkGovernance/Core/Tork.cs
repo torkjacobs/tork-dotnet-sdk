@@ -58,7 +58,8 @@ public class Tork
             Pii = piiDetected,
             Receipt = receipt,
             Region = options?.Region,
-            Industry = options?.Industry
+            Industry = options?.Industry,
+            SessionContext = options?.SessionContext
         };
     }
 
