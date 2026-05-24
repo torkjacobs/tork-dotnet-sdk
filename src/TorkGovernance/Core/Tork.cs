@@ -40,7 +40,16 @@ public class Tork
     {
         var piiDetected = DetectPII(content);
         var action = DetermineAction(piiDetected);
-        var output = action == "redact" ? Redact(content, piiDetected) : content;
+        // Security fix (Leak 1): always redact output when PII is present,
+        // regardless of action (DENY and ESCALATE must not expose raw input).
+        var output = piiDetected.Count > 0 ? Redact(content, piiDetected) : content;
+
+        // Security fix (Leak 2): never store raw matched values in the result;
+        // replace each match value with "[REDACTED]" while preserving type counts.
+        var piiSanitized = piiDetected.ToDictionary(
+            kvp => kvp.Key,
+            kvp => kvp.Value.Select(_ => "[REDACTED]").ToList()
+        );
 
         var receipt = new GovernanceReceipt
         {
@@ -55,7 +64,7 @@ public class Tork
         {
             Action = action,
             Output = output,
-            Pii = piiDetected,
+            Pii = piiSanitized,
             Receipt = receipt,
             Region = options?.Region,
             Industry = options?.Industry,
