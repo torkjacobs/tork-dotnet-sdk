@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace TorkGovernance.Core;
 
 /// <summary>
@@ -23,12 +25,20 @@ public class GovernanceResult
 public class SessionContext
 {
     /// <summary>Identifier for the agent making the call.</summary>
+    [JsonPropertyName("agent_id")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? AgentId { get; set; }
     /// <summary>Role of the agent: "planner", "worker", or "judge".</summary>
+    [JsonPropertyName("agent_role")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? AgentRole { get; set; }
     /// <summary>Groups all calls from the same agent session.</summary>
+    [JsonPropertyName("session_id")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? SessionId { get; set; }
     /// <summary>Position in the conversation (1, 2, 3...).</summary>
+    [JsonPropertyName("session_turn")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public int? SessionTurn { get; set; }
 }
 
