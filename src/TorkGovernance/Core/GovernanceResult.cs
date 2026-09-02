@@ -52,3 +52,17 @@ public class GovernOptions
     /// <summary>Optional agent/session context for multi-agent tracking.</summary>
     public SessionContext? SessionContext { get; set; }
 }
+
+/// <summary>
+/// Result of Tork.ScanToolResult: the scan result (Sanitized, Findings,
+/// Blocked, Reason) plus the Receipt that records it.
+/// </summary>
+public sealed class ToolResultScanReport
+{
+    public object? Sanitized { get; init; }
+    public required IReadOnlyList<ToolResultFinding> Findings { get; init; }
+    public required bool Blocked { get; init; }
+    /// <summary>Present only when Blocked is true.</summary>
+    public string? Reason { get; init; }
+    public required GovernanceReceipt Receipt { get; init; }
+}

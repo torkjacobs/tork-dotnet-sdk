@@ -108,6 +108,62 @@ public class Tork
         return redacted;
     }
 
+    /// <summary>
+    /// Scan a tool result for PII and prompt injection before it is
+    /// appended to model context, and record the scan as a governance
+    /// receipt carrying a tool_result_scan block (attested_by="client",
+    /// capture_mode="edge"). Pure and synchronous: makes no network call.
+    ///
+    /// The receipt's Action follows the four-way mapping shared with the JS
+    /// and Go SDKs: blocked -> "deny"; an injection finding present ->
+    /// "escalate"; otherwise a PII finding present -> "redact"; otherwise ->
+    /// "allow". Injection takes priority over PII when a scan contains
+    /// both, matching a payload that is both leaking data and carrying an
+    /// attempted takeover.
+    /// </summary>
+    public ToolResultScanReport ScanToolResult(ToolResultScanInput input, ToolResultScanOptions? options = null)
+    {
+        var scan = Core.ToolResultScan.Scan(input, options);
+        var action = DetermineToolResultScanAction(scan);
+        var block = ToolResultScanReceiptBuilder.Build(input.ToolName, input.ServerUri, scan, SdkVersion.Value);
+
+        var receipt = new GovernanceReceipt
+        {
+            ReceiptId = GenerateReceiptId(),
+            Timestamp = DateTime.UtcNow,
+            Action = action,
+            PiiTypesDetected = ToolResultScanQueries.PiiTypes(scan.Findings).ToList(),
+            PolicyVersion = _config.PolicyVersion,
+            ToolResultScan = block,
+        };
+
+        return new ToolResultScanReport
+        {
+            Sanitized = scan.Sanitized,
+            Findings = scan.Findings,
+            Blocked = scan.Blocked,
+            Reason = scan.Reason,
+            Receipt = receipt,
+        };
+    }
+
+    private static string DetermineToolResultScanAction(ToolResultScanResult scan)
+    {
+        if (scan.Blocked)
+        {
+            return "deny";
+        }
+
+        var hasInjection = scan.Findings.Any(f => f.Kind == ToolResultFindingKind.Injection);
+        if (hasInjection)
+        {
+            return "escalate";
+        }
+
+        var hasPii = scan.Findings.Any(f => f.Kind == ToolResultFindingKind.Pii);
+        return hasPii ? "redact" : "allow";
+    }
+
     private static string GenerateReceiptId()
     {
         return $"tork_{Guid.NewGuid():N}";
