@@ -9,20 +9,13 @@ namespace TorkGovernance.Core;
 public class Tork
 {
     private readonly TorkConfig _config;
-    private readonly Dictionary<string, Regex> _patterns;
 
     public Tork(TorkConfig? config = null)
     {
         _config = config ?? new TorkConfig();
-        _patterns = GetDefaultPatterns();
-
-        if (_config.CustomPatterns != null)
-        {
-            foreach (var pattern in _config.CustomPatterns)
-            {
-                _patterns[pattern.Key] = new Regex(pattern.Value, RegexOptions.Compiled);
-            }
-        }
+        // TorkConfig.CustomPatterns is passed straight to Pii.DetectPii on every
+        // call. It used to be merged into a second, private pattern table here,
+        // which is what let Govern and ScanToolResult drift apart.
     }
 
     /// <summary>
@@ -38,18 +31,42 @@ public class Tork
     /// </summary>
     public GovernanceResult Govern(string content, GovernOptions? options)
     {
-        var piiDetected = DetectPII(content);
+        // ONE DETECTOR. Until 0.3.0 this method ran its own pattern table and
+        // redacted by literal String.Replace of each matched VALUE -- which
+        // replaced every other occurrence of the same text anywhere in the
+        // content, used the dictionary key as the label (`[ssn_REDACTED]`
+        // rather than the JS-identical `[SSN_REDACTED]`), and knew nothing
+        // about the country registry. It now goes through Pii.DetectPii, the
+        // same detector ScanToolResult uses, so the two paths cannot drift.
+        var detection = Pii.DetectPii(content, _config.CustomPatterns, options?.Region);
+
+        // Security fix (Leak 2): never store raw matched values in the result;
+        // each value is "[REDACTED]" while the per-type counts are preserved.
+        var piiSanitized = new Dictionary<string, List<string>>();
+        foreach (var m in detection.Matches)
+        {
+            if (!piiSanitized.TryGetValue(m.Type, out var list))
+            {
+                list = new List<string>();
+                piiSanitized[m.Type] = list;
+            }
+            list.Add("[REDACTED]");
+        }
+        foreach (var m in detection.CountryMatches)
+        {
+            if (!piiSanitized.TryGetValue(m.Name, out var list))
+            {
+                list = new List<string>();
+                piiSanitized[m.Name] = list;
+            }
+            list.Add("[REDACTED]");
+        }
+
+        var piiDetected = piiSanitized;
         var action = DetermineAction(piiDetected);
         // Security fix (Leak 1): always redact output when PII is present,
         // regardless of action (DENY and ESCALATE must not expose raw input).
-        var output = piiDetected.Count > 0 ? Redact(content, piiDetected) : content;
-
-        // Security fix (Leak 2): never store raw matched values in the result;
-        // replace each match value with "[REDACTED]" while preserving type counts.
-        var piiSanitized = piiDetected.ToDictionary(
-            kvp => kvp.Key,
-            kvp => kvp.Value.Select(_ => "[REDACTED]").ToList()
-        );
+        var output = detection.HasPii ? detection.RedactedText : content;
 
         var receipt = new GovernanceReceipt
         {
@@ -72,40 +89,9 @@ public class Tork
         };
     }
 
-    private Dictionary<string, List<string>> DetectPII(string content)
-    {
-        var detected = new Dictionary<string, List<string>>();
-
-        foreach (var (type, pattern) in _patterns)
-        {
-            var matches = pattern.Matches(content);
-            if (matches.Count > 0)
-            {
-                detected[type] = matches.Select(m => m.Value).ToList();
-            }
-        }
-
-        return detected;
-    }
-
     private string DetermineAction(Dictionary<string, List<string>> piiDetected)
     {
         return piiDetected.Count == 0 ? "allow" : _config.DefaultAction;
-    }
-
-    private string Redact(string content, Dictionary<string, List<string>> piiDetected)
-    {
-        var redacted = content;
-
-        foreach (var (type, matches) in piiDetected)
-        {
-            foreach (var match in matches)
-            {
-                redacted = redacted.Replace(match, $"[{type}_REDACTED]");
-            }
-        }
-
-        return redacted;
     }
 
     /// <summary>
@@ -169,15 +155,4 @@ public class Tork
         return $"tork_{Guid.NewGuid():N}";
     }
 
-    private static Dictionary<string, Regex> GetDefaultPatterns()
-    {
-        return new Dictionary<string, Regex>
-        {
-            ["SSN"] = new Regex(@"\b\d{3}-\d{2}-\d{4}\b", RegexOptions.Compiled),
-            ["EMAIL"] = new Regex(@"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b", RegexOptions.Compiled),
-            ["PHONE"] = new Regex(@"\b(?:\+1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b", RegexOptions.Compiled),
-            ["CREDIT_CARD"] = new Regex(@"\b(?:\d{4}[-\s]?){3}\d{4}\b", RegexOptions.Compiled),
-            ["IP_ADDRESS"] = new Regex(@"\b(?:\d{1,3}\.){3}\d{1,3}\b", RegexOptions.Compiled)
-        };
-    }
 }

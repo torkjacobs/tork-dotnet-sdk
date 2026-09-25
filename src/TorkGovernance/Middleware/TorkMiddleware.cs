@@ -3,6 +3,11 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Http;
 using TorkGovernance.Core;
 
+// The SDK bundle declares `namespace Tork.Governance.Pii`, which introduces a
+// root namespace `Tork` that shadows this SDK's own `Tork` class (CS0118).
+// The alias resolves it HERE rather than by editing the generated bundle, which
+// stays byte-identical to landing/generated/sdk-registry/dotnet/PiiRegistry.cs.
+
 namespace TorkGovernance.Middleware;
 
 /// <summary>
@@ -11,10 +16,10 @@ namespace TorkGovernance.Middleware;
 public class TorkMiddleware
 {
     private readonly RequestDelegate _next;
-    private readonly Tork _tork;
+    private readonly Core.Tork _tork;
     private readonly TorkMiddlewareOptions _options;
 
-    public TorkMiddleware(RequestDelegate next, Tork tork, TorkMiddlewareOptions? options = null)
+    public TorkMiddleware(RequestDelegate next, Core.Tork tork, TorkMiddlewareOptions? options = null)
     {
         _next = next;
         _tork = tork;

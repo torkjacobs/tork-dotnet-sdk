@@ -199,7 +199,7 @@ public class ToolResultScanTests
         [Fact]
         public void RecordsCountsToolIdentityAndSdkVersionOnTheReceipt()
         {
-            var tork = new Tork();
+            var tork = new Core.Tork();
             var report = tork.ScanToolResult(new ToolResultScanInput
             {
                 ToolName = "lookup_customer",
@@ -234,7 +234,7 @@ public class ToolResultScanTests
         [Fact]
         public void EmitsTheBlockKeysSnakeCaseAndAlphabeticallySoEverySdkCanMatchItByteForByte()
         {
-            var tork = new Tork();
+            var tork = new Core.Tork();
             var report = tork.ScanToolResult(new ToolResultScanInput
             {
                 ToolName = "lookup_customer",
@@ -255,7 +255,7 @@ public class ToolResultScanTests
         [Fact]
         public void OmitsServerUriEntirelyWhenTheCallerSuppliedNone()
         {
-            var tork = new Tork();
+            var tork = new Core.Tork();
             var report = tork.ScanToolResult(new ToolResultScanInput { ToolName = "local_tool", Payload = "nothing here" });
 
             var json = Json(report.Receipt.ToolResultScan);
@@ -270,7 +270,7 @@ public class ToolResultScanTests
         [Fact]
         public void NeverPutsThePayloadAMatchedValueOrALocationPathOnTheReceipt()
         {
-            var tork = new Tork();
+            var tork = new Core.Tork();
             var report = tork.ScanToolResult(new ToolResultScanInput
             {
                 ToolName = "lookup_customer",
@@ -306,7 +306,7 @@ public class ToolResultScanTests
         [Fact]
         public void RecordsABlockedScanAsDenyWithTheBlockFlagged()
         {
-            var tork = new Tork();
+            var tork = new Core.Tork();
             var report = tork.ScanToolResult(
                 new ToolResultScanInput { ToolName = "fetch_page", Payload = InjectionText },
                 new ToolResultScanOptions { BlockOnInjection = true });
@@ -322,7 +322,7 @@ public class ToolResultScanTests
         [Fact]
         public void RecordsPiiOnlyScansAsRedact()
         {
-            var tork = new Tork();
+            var tork = new Core.Tork();
             var report = tork.ScanToolResult(new ToolResultScanInput
             {
                 ToolName = "lookup_customer",

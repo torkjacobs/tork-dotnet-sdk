@@ -77,36 +77,52 @@ There is also a standalone `ToolResultScan.Scan(input, options)` call with the s
 | Driver's License | D1234567 | [DL_REDACTED] |
 | Bank Account | 12345678901234 | [ACCOUNT_REDACTED] |
 
-## Regional PII Detection (v1.1)
+## Country PII detection
 
-> **Known gap:** `GovernOptions.Region` and `Industry` are currently accepted
-> and threaded through to `GovernanceResult`, but no region- or
-> industry-specific pattern is yet wired into detection — `Govern` always
-> runs the same Tier-1 vocabulary regardless of these values. The examples
-> below (Emirates ID, Aadhaar, ICD-10, ...) describe the intended surface,
-> not current behavior. Tracked for a follow-up change; do not rely on
-> region/industry patterns firing today.
+23 country profiles, 50 patterns and 20 check digits, generated from Tork's own
+country registry (bundle `1.0.0`) and computed entirely on-device.
 
-Activate country-specific and industry-specific PII patterns:
+Countries: AU, US, GB, EU, AE, SA, NG, IN, JP, CN, KR, BR, CA, ZA, GH, IT, KE,
+MU, MX, MY, PK, SG, TH.
+
+A country's patterns switch on when the text activates that country — the same
+content signals the cloud uses — so ordinary business text is not measured
+against 50 national-identifier patterns it could never contain. On the
+1,159-line business corpus this SDK is tested against, nothing is redacted.
+
+```csharp
+using TorkGovernance.Core;
+
+var r = Pii.DetectPii("South African ID number 8001015009087 for the FICA check.");
+r.Regions;       // ["ZA"]
+r.CountryLabels; // ["ZA_ID"]
+r.RedactedText;  // "South African ID number [ZA_ID_REDACTED] for the FICA check."
+```
+
+Pass `Region` to force profiles on when you already know the jurisdiction:
 
 ```csharp
 var tork = new Tork();
-
-// UAE regional detection — Emirates ID, +971 phone, PO Box
 var result = tork.Govern(
-    "Emirates ID: 784-1234-1234567-1",
-    new GovernOptions { Region = new[] { "ae" } }
-);
-
-// Multi-region + industry
-var result = tork.Govern(
-    "Aadhaar: 1234 5678 9012, ICD-10: J45.20",
-    new GovernOptions { Region = new[] { "in" }, Industry = "healthcare" }
-);
-
-// Available regions: AU, US, GB, EU, AE, SA, NG, IN, JP, CN, KR, BR
-// Available industries: healthcare, finance, legal
+    "Documento 529.982.247-25 arquivado.",
+    new GovernOptions { Region = new[] { "br" } });
+// result.Output == "Documento [CPF_REDACTED] arquivado."
 ```
+
+Three gates keep the false-positive rate down, and all three must pass:
+
+1. **Activation** — one of the country's content signals fires.
+2. **Keyword** — for 18 of the 24 national, tax and health identifiers, one of
+   the identifier's keywords must appear within 60 characters before the match
+   or 40 after.
+3. **Check digit** — for the 10 identifiers whose issuing authority publishes
+   the algorithm, a number of the right shape that fails its check digit is not
+   that country's identifier. Where the algorithm is community-sourced rather
+   than authority-published (`ca_sin`, `emirates_id`, `de_tax_id`, `kr_rrn`,
+   `sa_national_id`) the checksum is advisory and never rejects a match.
+
+Still cloud-only, and not in this SDK: the near-miss fallback, the slot,
+context, gravity and name layers, industry profiles, and org configuration.
 
 ## ASP.NET Core Integration
 

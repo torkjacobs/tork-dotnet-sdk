@@ -26,4 +26,10 @@
     <ProjectReference Include="..\..\src\TorkGovernance\TorkGovernance.csproj" />
   </ItemGroup>
 
+
+  <ItemGroup>
+    <!-- Country-layer parity fixtures, generated from the cloud's corpus. -->
+    <None Include="fixtures\**\*.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

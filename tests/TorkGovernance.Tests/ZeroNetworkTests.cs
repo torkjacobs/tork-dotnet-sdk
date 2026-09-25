@@ -10,12 +10,12 @@ namespace TorkGovernance.Tests;
 /// asserting it is never invoked around calls to scanToolResult and
 /// Tork#scanToolResult.
 ///
-/// .NET has no ambient global fetch to stub: Tork and the ToolResultScan
+/// .NET has no ambient global fetch to stub: Core.Tork and the ToolResultScan
 /// call graph never take an HttpClient (or any I/O handle) as a
 /// constructor or method dependency in the first place -- there is no
 /// injection point through which a network call could even be routed. So
 /// this port proves the equivalent guarantee structurally instead:
-///   1. no type reachable from Tork.ScanToolResult declares a field of a
+///   1. no type reachable from Core.Tork.ScanToolResult declares a field of a
 ///      networking type (HttpClient, WebClient, Socket, ...), so there is
 ///      nothing in the object graph capable of holding an open connection;
 ///   2. every public entry point on the scan path is synchronous (does not
@@ -29,7 +29,7 @@ public class ZeroNetworkTests
 {
     private static readonly Type[] ScanPathTypes =
     {
-        typeof(Tork),
+        typeof(Core.Tork),
         typeof(ToolResultScan),
         typeof(ToolResultScanReceiptBuilder),
         typeof(ToolResultScanQueries),
@@ -64,7 +64,7 @@ public class ZeroNetworkTests
     public void TheScanEntryPointsAreSynchronousNotAwaitingAnything()
     {
         AssertSynchronous(typeof(ToolResultScan).GetMethod(nameof(ToolResultScan.Scan)));
-        AssertSynchronous(typeof(Tork).GetMethod(nameof(Tork.ScanToolResult)));
+        AssertSynchronous(typeof(Core.Tork).GetMethod(nameof(Core.Tork.ScanToolResult)));
         AssertSynchronous(typeof(Pii).GetMethod(nameof(Pii.DetectPii)));
 
         static void AssertSynchronous(MethodInfo? method)
@@ -91,7 +91,7 @@ public class ZeroNetworkTests
             new ToolResultScanOptions { BlockOnInjection = true });
         Assert.True(blocked.Blocked);
 
-        var tork = new Tork();
+        var tork = new Core.Tork();
         var governed = tork.ScanToolResult(new ToolResultScanInput { ToolName = "t", ServerUri = "mcp://x", Payload = payload });
         Assert.NotEmpty(governed.Findings);
 

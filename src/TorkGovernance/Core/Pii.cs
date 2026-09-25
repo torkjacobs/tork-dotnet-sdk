@@ -1,5 +1,7 @@
 using System.Text.RegularExpressions;
 
+using TorkGovernance.CountryPii;
+
 namespace TorkGovernance.Core;
 
 /// <summary>
@@ -110,6 +112,19 @@ public static class Pii
         public required int Count { get; init; }
         public required IReadOnlyList<PiiMatch> Matches { get; init; }
         public required string RedactedText { get; init; }
+
+        /// <summary>
+        /// Country-registry detections. Kept separate from <see cref="Matches"/>
+        /// so the ten L0 type labels stay the closed set they have always been.
+        /// </summary>
+        public IReadOnlyList<PiiCountry.CountryPiiMatch> CountryMatches { get; init; } =
+            Array.Empty<PiiCountry.CountryPiiMatch>();
+
+        /// <summary>Redaction labels of those matches, e.g. "NATIONAL_ID".</summary>
+        public IReadOnlyList<string> CountryLabels { get; init; } = Array.Empty<string>();
+
+        /// <summary>Country profiles the text activated, in registry order.</summary>
+        public IReadOnlyList<string> Regions { get; init; } = Array.Empty<string>();
     }
 
     /// <summary>
@@ -126,33 +141,103 @@ public static class Pii
     /// one string, and (as in the JS source) custom-pattern redactions are
     /// never counted as findings either way.
     /// </summary>
-    public static PiiDetectionResult DetectPii(string text, IReadOnlyDictionary<string, string>? customPatterns = null)
+    public static PiiDetectionResult DetectPii(
+        string text,
+        IReadOnlyDictionary<string, string>? customPatterns = null,
+        IReadOnlyList<string>? regionOverride = null)
     {
         var matches = new List<PiiMatch>();
         var detectedTypes = new List<string>();
-        var redactedText = text;
 
+        // L0: collect every match against the ORIGINAL text.
+        //
+        // REDACTION IS ONE PASS. Until 0.2.0 each type was redacted with its own
+        // Regex.Replace over text a previous type had already rewritten, while
+        // Matches carried indices into the ORIGINAL text. Two types matching
+        // overlapping spans could leave half an identifier standing beside a
+        // redaction token -- digits exposed in output the caller had been told
+        // was redacted. Every match is now collected against the original text,
+        // overlaps are resolved before anything is rewritten, and the surviving
+        // spans are spliced right to left in a single pass.
+        var l0 = new List<(PiiMatch Match, string Redaction)>();
         foreach (var def in Patterns)
         {
-            var found = false;
             foreach (Match m in def.Pattern.Matches(text))
             {
-                matches.Add(new PiiMatch
+                if (m.Length == 0) continue;
+                l0.Add((new PiiMatch
                 {
                     Type = def.Type,
                     Value = "[REDACTED]",
                     StartIndex = m.Index,
                     EndIndex = m.Index + m.Length,
-                });
-                found = true;
+                }, def.Redaction));
             }
-            if (found && !detectedTypes.Contains(def.Type))
+        }
+
+        // Country layer. An explicit region from the caller is authoritative;
+        // otherwise the profiles are activated from the content itself.
+        var regions = regionOverride is { Count: > 0 }
+            ? regionOverride.Select(r => r.ToUpperInvariant()).ToList()
+            : PiiCountry.InferRegions(text).ToList();
+        var countryMatches = PiiCountry.Detect(text, PiiCountry.PatternsForRegions(regions));
+
+        // Resolve overlaps before anything is rewritten. A country identifier
+        // supersedes any L0 span it fully contains -- the cloud does the same,
+        // which is how a Saudi national ID stops coming back as
+        // [PHONE_REDACTED].
+        var claimed = new List<(int Start, int End)>();
+        var spans = new List<PiiCountry.RedactionSpan>();
+        foreach (var c in countryMatches)
+        {
+            claimed.Add((c.StartIndex, c.EndIndex));
+            spans.Add(new PiiCountry.RedactionSpan
             {
-                detectedTypes.Add(def.Type);
+                StartIndex = c.StartIndex,
+                EndIndex = c.EndIndex,
+                Redaction = c.Redaction,
+            });
+        }
+
+        foreach (var (m, redaction) in l0)
+        {
+            var s = m.StartIndex;
+            var e = m.EndIndex;
+            var overlapping = claimed.Where(c => s < c.End && e > c.Start).ToList();
+            if (overlapping.Count > 0)
+            {
+                var swallowsAll = overlapping.All(c =>
+                {
+                    var (cs, ce) = PiiCountry.TrimmedCore(text, c.Start, c.End);
+                    return s <= cs && e >= ce;
+                });
+                if (!swallowsAll) continue;
+
+                // An L0 span that fully contains a country span still loses:
+                // the country label is the more specific claim.
+                var hitsCountry = overlapping.Any(o =>
+                    countryMatches.Any(c => c.StartIndex == o.Start && c.EndIndex == o.End));
+                if (hitsCountry) continue;
+
+                foreach (var o in overlapping)
+                {
+                    claimed.Remove(o);
+                    spans.RemoveAll(sp => sp.StartIndex == o.Start && sp.EndIndex == o.End);
+                }
             }
 
-            redactedText = def.Pattern.Replace(redactedText, def.Redaction);
+            claimed.Add((s, e));
+            spans.Add(new PiiCountry.RedactionSpan
+            {
+                StartIndex = s,
+                EndIndex = e,
+                Redaction = redaction,
+            });
+            matches.Add(m);
+            if (!detectedTypes.Contains(m.Type)) detectedTypes.Add(m.Type);
         }
+
+        var redactedText = PiiCountry.ApplyRedactions(text, spans);
 
         if (customPatterns is { Count: > 0 })
         {
@@ -168,13 +253,22 @@ public static class Pii
             }
         }
 
+        var countryLabels = new List<string>();
+        foreach (var c in countryMatches)
+        {
+            if (!countryLabels.Contains(c.Label)) countryLabels.Add(c.Label);
+        }
+
         return new PiiDetectionResult
         {
-            HasPii = matches.Count > 0,
+            HasPii = matches.Count + countryMatches.Count > 0,
             Types = detectedTypes,
-            Count = matches.Count,
-            Matches = matches,
+            Count = matches.Count + countryMatches.Count,
+            Matches = matches.OrderBy(m => m.StartIndex).ToList(),
             RedactedText = redactedText,
+            CountryMatches = countryMatches,
+            CountryLabels = countryLabels,
+            Regions = regions,
         };
     }
 }

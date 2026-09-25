@@ -20,7 +20,7 @@ public static class TorkExtensions
         configure?.Invoke(config);
 
         services.AddSingleton(config);
-        services.AddSingleton<Tork>();
+        services.AddSingleton<Core.Tork>();
 
         return services;
     }
@@ -32,7 +32,7 @@ public static class TorkExtensions
         this IApplicationBuilder app,
         TorkMiddlewareOptions? options = null)
     {
-        var tork = app.ApplicationServices.GetRequiredService<Tork>();
+        var tork = app.ApplicationServices.GetRequiredService<Core.Tork>();
         return app.UseMiddleware<TorkMiddleware>(tork, options);
     }
 }
