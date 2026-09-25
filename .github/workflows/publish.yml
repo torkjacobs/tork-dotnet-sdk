@@ -1,0 +1,54 @@
+name: Publish
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      PROJECT_PATH: src/TorkGovernance/TorkGovernance.csproj
+      TEST_PROJECT_PATH: tests/TorkGovernance.Tests/TorkGovernance.Tests.csproj
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Check tag version matches csproj version
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          CSPROJ_VERSION=$(grep -oPm1 '(?<=<Version>)[^<]+' "$PROJECT_PATH")
+          if [ "$TAG_VERSION" != "$CSPROJ_VERSION" ]; then
+            echo "::error::Tag version ($TAG_VERSION) does not match <Version> in $PROJECT_PATH ($CSPROJ_VERSION)"
+            exit 1
+          fi
+          echo "Tag version $TAG_VERSION matches csproj version $CSPROJ_VERSION"
+
+      - name: Test
+        run: dotnet test "$TEST_PROJECT_PATH" -c Release
+
+      - name: Pack
+        run: dotnet pack "$PROJECT_PATH" -c Release -o out
+
+      - name: NuGet login (trusted publishing)
+        id: nuget-login
+        uses: NuGet/login@v1
+        with:
+          user: torknetwork
+
+      - name: Push to NuGet
+        run: |
+          dotnet nuget push "out/TorkGovernance.*.nupkg" \
+            --api-key "${{ steps.nuget-login.outputs.NUGET_API_KEY }}" \
+            --source https://api.nuget.org/v3/index.json \
+            --skip-duplicate
