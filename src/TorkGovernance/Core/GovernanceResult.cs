@@ -19,8 +19,8 @@ public class GovernanceResult
 
 /// <summary>
 /// Agent/session context for multi-agent governance tracking.
-/// All fields are optional. When provided, they are included in the POST body
-/// to /api/v1/govern and returned in the receipt under session_context.
+/// All fields are optional. When provided, they are carried on the result and on
+/// the receipt under session_context; unset fields are omitted from the JSON.
 /// </summary>
 public class SessionContext
 {
