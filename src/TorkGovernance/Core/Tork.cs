@@ -74,7 +74,8 @@ public class Tork
             Timestamp = DateTime.UtcNow,
             Action = action,
             PiiTypesDetected = piiDetected.Keys.ToList(),
-            PolicyVersion = _config.PolicyVersion
+            PolicyVersion = _config.PolicyVersion,
+            SessionContext = options?.SessionContext
         };
 
         return new GovernanceResult

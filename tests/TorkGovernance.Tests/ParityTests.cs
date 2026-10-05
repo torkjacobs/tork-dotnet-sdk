@@ -114,3 +114,71 @@ public class ParityTests
         });
     }
 }
+
+/// <summary>
+/// SDK-DECLARED-PII-TYPES-WITHOUT-PATTERNS: every declared type has a positive
+/// and a negative example, and the positive one is detected end to end.
+/// </summary>
+public class PiiTypeExamplesTests
+{
+    public static IEnumerable<object[]> Cases() => new[]
+    {
+        new object[] { "ssn", "SSN 123-45-6789 on file", "SSN 123456789 on file" },
+        new object[] { "credit_card", "card 4111-1111-1111-1111 ok", "card 4111-1111-1111 ok" },
+        new object[] { "email", "mail jane.doe@example.com now", "mail jane.doe at example dot com" },
+        new object[] { "phone", "call 555-123-4567 now", "call 55-12 now" },
+        new object[] { "address", "lives at 123 Main Street today", "lives on Main Street today" },
+        new object[] { "ip_address", "host 192.168.1.1 up", "host 999.999.999.999 up" },
+        new object[] { "date_of_birth", "born 01/15/1990 in", "born 13/45/1990 in" },
+        new object[] { "passport", "passport AB1234567 seen", "passport ab1234567 seen" },
+        new object[] { "drivers_license", "licence D1234567 seen", "licence d1234567 seen" },
+        new object[] { "bank_account", "account 12345678901 open", "account 1234567 open" },
+    };
+
+    [Fact]
+    public void EveryDeclaredTypeHasAnExampleCase()
+    {
+        var covered = Cases().Select(c => (string)c[0]).ToHashSet();
+        foreach (var def in Pii.Patterns)
+            Assert.True(covered.Contains(def.Type), $"declared type '{def.Type}' has no positive/negative test case");
+    }
+
+    [Theory]
+    [MemberData(nameof(Cases))]
+    public void TypeDetectsPositiveAndRejectsNegative(string type, string positive, string negative)
+    {
+        var def = Pii.Patterns.Single(p => p.Type == type);
+        Assert.True(def.Pattern.IsMatch(positive), $"{type}: positive example not matched");
+        Assert.False(def.Pattern.IsMatch(negative), $"{type}: negative example wrongly matched");
+        Assert.Contains(type, Pii.DetectPii(positive).Types);
+    }
+}
+
+public class AgentTelemetryTests
+{
+    [Fact]
+    public void GovernPassesAgentFieldsThroughToResultAndReceipt()
+    {
+        var ctx = new SessionContext { AgentId = "a-1", AgentRole = "worker", SessionId = "s-9", SessionTurn = 3 };
+        var r = new TorkGovernance.Core.Tork().Govern("hello", new GovernOptions { SessionContext = ctx });
+        Assert.Same(ctx, r.SessionContext);
+        Assert.Same(ctx, r.Receipt.SessionContext);
+        var json = System.Text.Json.JsonSerializer.Serialize(r.Receipt);
+        Assert.Contains("\"session_context\":{\"agent_id\":\"a-1\",\"agent_role\":\"worker\",\"session_id\":\"s-9\",\"session_turn\":3}", json);
+    }
+
+    [Fact]
+    public void GovernOmitsAgentFieldsWhenNotSet()
+    {
+        var r = new TorkGovernance.Core.Tork().Govern("hello");
+        Assert.Null(r.Receipt.SessionContext);
+        Assert.DoesNotContain("session_context", System.Text.Json.JsonSerializer.Serialize(r.Receipt));
+    }
+
+    [Fact]
+    public void UnsetIndividualFieldsAreOmitted()
+    {
+        var json = System.Text.Json.JsonSerializer.Serialize(new SessionContext { SessionTurn = 1 });
+        Assert.Equal("{\"session_turn\":1}", json);
+    }
+}

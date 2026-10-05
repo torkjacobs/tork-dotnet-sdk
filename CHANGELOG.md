@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.4.0 - 2026-10-03
+
+### Added
+- **Agent telemetry on receipts.** `GovernOptions.SessionContext` (`AgentId`,
+  `AgentRole`, `SessionId`, `SessionTurn` as `int?`) is now carried onto
+  `GovernanceReceipt.SessionContext`, serialized as `session_context` with the
+  snake_case keys `agent_id`, `agent_role`, `session_id`, `session_turn`. Unset
+  fields, and the whole block when none is set, are omitted.
+- Positive and negative test examples for every declared Tier-1 PII type, plus
+  a guard that fails if a declared type has no example.
+
+### PII type audit (SDK-DECLARED-PII-TYPES-WITHOUT-PATTERNS)
+- All 10 declared Tier-1 types (ssn, credit_card, email, phone, address,
+  ip_address, date_of_birth, passport, drivers_license, bank_account) have a
+  live pattern; none were removed. `Pii.Patterns` is the single declaration.
+- Known precision limits, not removals: `bank_account` (any 8-17 digit run),
+  `passport` and `drivers_license` are format-only and overlap each other.
+
+
 ## 0.3.0 - 2026-09-25
 
 ### Added

@@ -77,6 +77,18 @@ There is also a standalone `ToolResultScan.Scan(input, options)` call with the s
 | Driver's License | D1234567 | [DL_REDACTED] |
 | Bank Account | 12345678901234 | [ACCOUNT_REDACTED] |
 
+### Agent telemetry (optional)
+
+Pass `SessionContext` in `GovernOptions` to record which agent and session made a call. All four fields are optional and omitted from the receipt when unset:
+
+```csharp
+var result = tork.Govern(text, new GovernOptions
+{
+    SessionContext = new SessionContext { AgentId = "agent-1", AgentRole = "worker", SessionId = "sess-9", SessionTurn = 3 }
+});
+// result.Receipt.SessionContext -> JSON "session_context": { "agent_id", "agent_role", "session_id", "session_turn" }
+```
+
 ## Country PII detection
 
 23 country profiles, 50 patterns and 20 check digits, generated from Tork's own
